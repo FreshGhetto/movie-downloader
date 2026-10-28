@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+build/
+dist/
+dist-aggiornata/
+work/
+*.spec
+*.pyc
+*.pyo
+bin/yt-dlp.exe
