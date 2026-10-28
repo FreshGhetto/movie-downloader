@@ -16,6 +16,7 @@ from config.i18n import t, set_language, LANGUAGES, current as current_lang
 from config.version import VERSION
 from services.core import safe_name, unique_base, validate_url, find_ffmpeg, version, command, progress
 from services.workers import Task, analyze, search_tmdb_both, update_ytdlp, check_app_update
+from gui.artwork import ArtworkLoader
 
 BASE = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
 
@@ -177,6 +178,10 @@ class Window(QMainWindow):
         self.setStyleSheet(STYLE)
 
         root = GlassBackdrop()
+        self.backdrop = root
+        self.artwork_loader = ArtworkLoader(self)
+        self.artwork_loader.ready.connect(self._apply_backdrop)
+        self._selected_backdrop_path = None
         root.setObjectName('root')
         self.setCentralWidget(root)
         main_layout = QHBoxLayout(root)
@@ -942,6 +947,7 @@ class Window(QMainWindow):
                 c.setChecked(False)
         card.setChecked(True)
         data = card.data
+        self._select_backdrop(data)
         thumbnail = card.poster_label.pixmap().scaled(44, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         thumbnail.setDevicePixelRatio(1)
         self.summary_poster.setPixmap(thumbnail)
@@ -951,6 +957,20 @@ class Window(QMainWindow):
             self.kind.setCurrentIndex(1)
         elif data.get('_kind') == 'movie':
             self.kind.setCurrentIndex(0)
+
+    def _select_backdrop(self, data):
+        self._selected_backdrop_path = data.get('backdrop_path')
+        self.artwork_loader.cancel()
+        # The poster is available immediately while the landscape artwork loads.
+        # Clear the old film first, including when the new one has no artwork.
+        self.backdrop.set_artwork()
+        self.backdrop.set_artwork(data.get('poster_bytes'))
+        if self._selected_backdrop_path:
+            self.artwork_loader.request(self._selected_backdrop_path)
+
+    def _apply_backdrop(self, path, data):
+        if path == self._selected_backdrop_path:
+            self.backdrop.set_artwork(data)
 
     def _add_job(self):
         try:
@@ -1251,5 +1271,6 @@ class Window(QMainWindow):
             return
         self._save_queue()
         save(self.settings)
+        self.artwork_loader.cancel()
         self.tray.hide()
         event.accept()

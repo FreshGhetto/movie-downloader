@@ -12,6 +12,8 @@ Built with **Python 3.11+**, **PySide6**, and **yt-dlp**.
 
 ## Features
 
+- **Smoked-glass UI** — dark panels, responsive layout and readable poster cards
+- **Movie backgrounds** — blurred, darkened TMDb artwork follows the selected title, with poster fallback
 - **Queue system** — add multiple downloads, process them one by one. Queue persists between sessions
 - **TMDb search** — search movies and TV shows together, with posters, synopses, and auto-fill of title/year
 - **Automatic subtitles** — downloads and embeds subtitles (default: Italian + English)
@@ -47,10 +49,17 @@ py -3.11 -m venv .venv
 ### Build standalone .exe
 
 ```bash
-.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --windowed --onedir --name MovieDownloader --add-binary "bin\yt-dlp.exe;bin" main.py
+.venv\Scripts\python.exe scripts\build_release.py
 ```
 
-Output in `dist/MovieDownloader/` — distribute the whole folder.
+Or run `CreaExe.bat`. The build reads `config/version.py` and embeds the version in the Windows executable properties.
+
+Output for the current release: `dist-aggiornata/v2.2.0/MovieDownloader-v2.2.0.exe`.
+This is a standalone Windows x64 executable; Python is not required on the destination computer.
+The same directory contains a ZIP distribution, release notes and SHA-256 checksums.
+`Avvia aggiornato.bat` is updated by the build to launch this version.
+
+See the [2.2.0 release notes](releases/v2.2.0.md) and [changelog](CHANGELOG.md).
 
 ### Requirements
 

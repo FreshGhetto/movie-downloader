@@ -1,7 +1,10 @@
 """Smoked-glass surfaces and small, scalable controls for the desktop UI."""
 from PySide6.QtCore import Qt, QRectF, QSize
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QIcon, QRadialGradient, QPainterPath
-from PySide6.QtWidgets import QWidget, QFrame, QCheckBox, QHBoxLayout, QBoxLayout, QLabel, QComboBox
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QIcon, QRadialGradient, QPainterPath, QLinearGradient
+from PySide6.QtWidgets import (
+    QWidget, QFrame, QCheckBox, QHBoxLayout, QBoxLayout, QLabel, QComboBox,
+    QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect,
+)
 
 BG = '#101b24'
 BG_CARD = '#202f3c'
@@ -73,11 +76,54 @@ def icon(name, color=TEXT_DIM, size=24):
 
 class GlassBackdrop(QWidget):
     """Stable internal backdrop; does not depend on OS transparency settings."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._artwork = QPixmap()
+
+    def set_artwork(self, data=None):
+        if not data:
+            self._artwork = QPixmap()
+            self.update()
+            return True
+        source = QPixmap()
+        if not source.loadFromData(data):
+            return False
+        # Blur once per selection, never on every frame or during resizing.
+        source = source.scaled(1280, 800, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+        scene = QGraphicsScene()
+        item = QGraphicsPixmapItem(source)
+        effect = QGraphicsBlurEffect()
+        effect.setBlurRadius(14)
+        effect.setBlurHints(QGraphicsBlurEffect.BlurHint.QualityHint)
+        item.setGraphicsEffect(effect)
+        scene.addItem(item)
+        rendered = QPixmap(source.size())
+        rendered.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(rendered)
+        scene.render(painter, QRectF(rendered.rect()), QRectF(source.rect()))
+        painter.end()
+        self._artwork = rendered
+        self.update()
+        return True
+
     def paintEvent(self, event):
         p = QPainter(self)
         p.fillRect(self.rect(), QColor(BG))
-        for x, y, radius, color in ((0.12, 0.02, 0.8, '#344e65'),
-                                     (0.9, 0.8, 0.65, '#233d4c')):
+        if not self._artwork.isNull():
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            # Cover the full window without stretching either orientation.
+            scale = max(self.width() / self._artwork.width(), self.height() / self._artwork.height())
+            width, height = self._artwork.width() * scale, self._artwork.height() * scale
+            target = QRectF((self.width() - width) / 2, (self.height() - height) / 2, width, height)
+            p.drawPixmap(target, self._artwork, QRectF(self._artwork.rect()))
+            veil = QLinearGradient(0, 0, 0, self.height())
+            veil.setColorAt(0, QColor(9, 17, 26, 115))
+            veil.setColorAt(1, QColor(9, 17, 26, 205))
+            p.fillRect(self.rect(), veil)
+            return
+        for x, y, radius, color in ((0.12, 0.02, 0.8, '#192b3b'),
+                                     (0.9, 0.8, 0.65, '#142632')):
             gradient = QRadialGradient(self.width() * x, self.height() * y,
                                        max(self.width(), self.height()) * radius)
             gradient.setColorAt(0, QColor(color))

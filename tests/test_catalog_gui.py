@@ -141,3 +141,62 @@ def test_responsive_layout_does_not_clip(window, size):
     for index in range(5):
         window.nav_buttons[index].click()
         assert window.stack.currentIndex() == index
+
+
+def artwork_bytes(color):
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage, QColor
+    image = QImage(320, 180, QImage.Format.Format_RGB32)
+    image.fill(QColor(color))
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, 'PNG')
+    return bytes(buffer.data())
+
+
+def test_default_dark_and_selected_poster_fallback(window):
+    assert window.backdrop._artwork.isNull()
+    window._select_backdrop({'poster_bytes': artwork_bytes('#ffdd00')})
+    assert not window.backdrop._artwork.isNull()
+    window._select_backdrop({})
+    assert window.backdrop._artwork.isNull()
+    window._select_backdrop({'poster_bytes': b'invalid'})
+    assert window.backdrop._artwork.isNull()
+
+
+def test_late_artwork_cannot_replace_current_selection(window, monkeypatch):
+    monkeypatch.setattr(window.artwork_loader, 'request', Mock())
+    first = {'title': 'Primo', '_kind': 'movie', 'backdrop_path': '/first.jpg',
+             'poster_bytes': artwork_bytes('red')}
+    second = {'title': 'Secondo', '_kind': 'movie', 'backdrop_path': '/second.jpg',
+              'poster_bytes': artwork_bytes('blue')}
+    window._task = lambda fn, callback, button=None: callback([first, second])
+    window.query.setText('Film')
+    window.search_btn.click()
+    window.poster_cards[0].click()
+    window.poster_cards[1].click()
+    window.artwork_loader.ready.emit('/second.jpg', artwork_bytes('green'))
+    current = window.backdrop._artwork.cacheKey()
+    window.artwork_loader.ready.emit('/first.jpg', artwork_bytes('red'))
+    assert window.backdrop._artwork.cacheKey() == current
+    assert window.title_input.text() == 'Secondo'
+    window.artwork_loader.ready.emit('/second.jpg', b'not an image')
+    assert window.backdrop._artwork.cacheKey() == current
+    window._select_backdrop({})
+    window.artwork_loader.ready.emit('/second.jpg', artwork_bytes('blue'))
+    assert window.backdrop._artwork.isNull()
+
+
+def test_bright_artwork_stays_dark_and_resizes(window):
+    from gui.design import GlassBackdrop
+    surface = GlassBackdrop()
+    surface.resize(800, 450)
+    surface.set_artwork(artwork_bytes('white'))
+    rendered = surface.grab().toImage()
+    assert rendered.pixelColor(400, 10).lightness() < 160
+    assert rendered.pixelColor(400, 430).lightness() < 80
+    surface.resize(400, 700)
+    assert surface.grab().size().height() == 700
+    surface.set_artwork()
+    assert surface.grab().toImage().pixelColor(200, 350).lightness() < 60
+    surface.deleteLater()

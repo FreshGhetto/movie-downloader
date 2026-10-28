@@ -26,3 +26,22 @@ Ricerca reale TMDb e download da servizi esterni non verificati: mancano la chia
 - 19 test automatici superati. Layout verificato a 1440×900, 1060×740 e 860×600 senza scorrimento orizzontale della pagina.
 - Ricerca TMDb reale verificata: 12 risultati con locandine. Analisi, coda e download di un video sintetico da localhost completati con configurazione di test isolata.
 - Build PyInstaller creata in `dist-aggiornata/MovieDownloader`; avvio riuscito, finestra presente e processo responsivo. Aprire `Avvia aggiornato.bat` per questa build oppure `Avvia.bat` per il codice sorgente.
+
+
+### Sfondo del film selezionato
+
+- Il tema iniziale resta scuro. Selezionando una locandina, lo sfondo mostra l'immagine panoramica TMDb del titolo, sfocata e oscurata; la locandina è il fallback immediato.
+- Caricamento asincrono con annullamento della richiesta precedente, cache in memoria limitata a otto immagini e nessuna modifica alle impostazioni persistenti. Immagini mancanti o errori di rete non bloccano la selezione né mostrano finestre di errore.
+- 24 test passati, inclusi selezioni rapide, risposte tardive, fallback, cache, immagini non valide, contrasto delle immagini chiare e ridimensionamento.
+- Ricerca e sfondo panoramico di The Batman verificati con TMDb. Build in `dist-aggiornata/sfondo-dinamico/MovieDownloader`; `Avvia aggiornato.bat` punta alla nuova versione.
+- Redesign precedente pubblicato su `origin/main` nel commit `57db1c8`; le modifiche allo sfondo sono successive a quel push.
+
+
+## Release 2.2.0 — 28 ottobre 2026
+
+- Versione applicazione 2.2.0, ProductVersion Windows 2.2.0 e FileVersion 2.2.0.0.
+- Build standalone a file singolo, ZIP distribuibile, release notes italiane e checksum SHA-256 in `dist-aggiornata/v2.2.0`.
+- `CreaExe.bat` usa `scripts/build_release.py`; il numero di versione deriva da `config/version.py`. `Avvia aggiornato.bat` avvia la build 2.2.0.
+- 28 test superati e smoke test locale completo riuscito. Controllo aggiornamenti corretto per non proporre downgrade.
+- EXE standalone avviato: finestra presente e processo responsivo. Proprietà versione, integrità dello ZIP e checksum verificati.
+- Note di rilascio in `releases/v2.2.0.md`; cronologia riassunta in `CHANGELOG.md`.

@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import requests
 from PySide6.QtCore import QThread, Signal
@@ -97,9 +98,9 @@ def check_app_update(current_version):
             return None
         data = r.json()
         tag = data.get('tag_name', '').lstrip('v')
-        if not tag:
+        if not re.fullmatch(r'\d+\.\d+\.\d+', tag) or not re.fullmatch(r'\d+\.\d+\.\d+', current_version):
             return None
-        if tag != current_version:
+        if tuple(map(int, tag.split('.'))) > tuple(map(int, current_version.split('.'))):
             url = data.get('html_url', '')
             return {'version': tag, 'url': url}
         return {'version': tag, 'url': '', 'up_to_date': True}

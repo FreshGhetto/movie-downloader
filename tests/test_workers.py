@@ -39,3 +39,21 @@ def test_tmdb_api_key():
         search_tmdb('Film','  chiave-v3  ','tv')
         assert get.call_args.kwargs['params']['api_key']=='chiave-v3'
         assert get.call_args.kwargs['headers']=={}
+
+
+@pytest.mark.parametrize('current,latest,up_to_date', [
+    ('2.2.0', 'v2.1.1', True),
+    ('2.2.0', 'v2.2.0', True),
+    ('2.2.0', 'v2.2.1', False),
+    ('2.9.0', 'v2.10.0', False),
+])
+def test_update_check_does_not_offer_downgrades(current, latest, up_to_date):
+    from unittest.mock import Mock
+    from services.workers import check_app_update
+    response = Mock(status_code=200)
+    response.json.return_value = {'tag_name': latest, 'html_url': 'https://github.com/example/releases/latest'}
+    with patch('services.workers.requests.get', return_value=response):
+        result = check_app_update(current)
+    assert result.get('up_to_date', False) is up_to_date
+    if not up_to_date:
+        assert result['version'] == latest.lstrip('v')
