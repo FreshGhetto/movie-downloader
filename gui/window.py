@@ -37,11 +37,11 @@ class PosterCard(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet(f'''
             QPushButton {{
-                background: transparent; border: 1px solid transparent; border-radius: 14px;
+                background: transparent; border: none; border-radius: 14px;
                 padding: 0; text-align: center;
             }}
-            QPushButton:hover {{ border-color: {ACCENT}; background: {BG_INPUT}; }}
-            QPushButton:checked {{ border-color: {ACCENT}; border-width: 2px; }}
+            QPushButton:hover {{ background: rgba(255,255,255,12); }}
+            QPushButton:checked {{ background: rgba(255,255,255,18); }}
         ''')
         self.setCheckable(True)
 
@@ -185,6 +185,7 @@ class Window(QMainWindow):
         self._selected_poster_bytes = None
         self._selected_artwork_key = None
         self._selected_backdrop_path = None
+        self._last_backdrop_data = None
         root.setObjectName('root')
         self.setCentralWidget(root)
         main_layout = QHBoxLayout(root)
@@ -301,6 +302,10 @@ class Window(QMainWindow):
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
         self.stack.setCurrentIndex(index)
+        if index == 0 and self._last_backdrop_data is not None:
+            self.backdrop.set_artwork(self._last_backdrop_data)
+        elif index != 0:
+            self.backdrop.set_artwork()
 
     # ---- Download Page ----
     def _build_download_page(self):
@@ -977,11 +982,15 @@ class Window(QMainWindow):
 
     def _fallback_backdrop(self, path):
         if path == self._selected_backdrop_path:
-            if not self.backdrop.set_artwork(self._selected_poster_bytes):
+            if self._selected_poster_bytes and self.backdrop.set_artwork(self._selected_poster_bytes):
+                self._last_backdrop_data = self._selected_poster_bytes
+            else:
+                self._last_backdrop_data = None
                 self.backdrop.set_artwork()
 
     def _apply_backdrop(self, path, data):
         if path == self._selected_backdrop_path:
+            self._last_backdrop_data = data
             self.backdrop.set_artwork(data)
 
     def _add_job(self):

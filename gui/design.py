@@ -255,11 +255,7 @@ class GlassPanel(QFrame):
             painter.drawPixmap(QRectF(self.rect()), backdrop.frame_pair()[1], source)
         else:
             painter.fillRect(self.rect(), QColor(BG_CARD))
-        # Pure blur only – no colour veil, no tint.
         painter.setClipping(False)
-        painter.setPen(QPen(QColor(255, 255, 255, 26), 1))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(outline)
 
 
 class GlassComboBox(QComboBox):
@@ -334,11 +330,10 @@ QWidget#page, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {{ ba
 QFrame#glass, QWidget#sidebar {{
     background: transparent; border: none; border-radius: 22px;
 }}
-QPushButton#nav {{ background: transparent; border: 1px solid transparent; text-align: left;
+QPushButton#nav {{ background: transparent; border: none; text-align: left;
     padding: 13px 14px; border-radius: 16px; color: {TEXT_DIM}; font-weight: 500; }}
 QPushButton#nav:hover {{ background: rgba(255,255,255,15); color: {TEXT}; }}
-QPushButton#nav:checked {{ background: rgba(255,255,255,25);
-    color: {TEXT}; border: 1px solid rgba(255,255,255,30); }}
+QPushButton#nav:checked {{ background: rgba(255,255,255,25); color: {TEXT}; }}
 QLabel {{ background: transparent; border: none; }}
 QLabel#page_title {{ font-size: 30px; font-weight: 700; }}
 QLabel#section {{ font-size: 16px; font-weight: 600; }}
@@ -347,9 +342,9 @@ QLabel#status_bar {{ color: {TEXT_DIM}; font-size: 11px; padding: 7px 22px; }}
 QLabel#empty {{ color: {TEXT_DIM}; font-size: 13px; padding: 24px; }}
 QLabel#version {{ color: {TEXT_DIM}; font-size: 11px; padding: 8px 12px; }}
 QLabel#logo {{ font-size: 15px; font-weight: 700; }}
-QLineEdit, QComboBox {{ background: rgba(0,0,0,38); border: 1px solid {BORDER};
+QLineEdit, QComboBox {{ background: rgba(0,0,0,38); border: 1px solid transparent;
     border-radius: 11px; padding: 10px 12px; selection-background-color: #666666; min-height: 18px; }}
-QLineEdit:focus, QComboBox:focus {{ border-color: {ACCENT}; background: rgba(255,255,255,16); }}
+QLineEdit:focus, QComboBox:focus {{ border-color: rgba(255,255,255,40); background: rgba(255,255,255,16); }}
 QLineEdit:disabled, QComboBox:disabled {{ color: #858585; background: rgba(0,0,0,28); }}
 QComboBox {{ padding-right: 26px; }}
 QComboBox::drop-down {{ border: none; width: 24px; }}
@@ -357,28 +352,26 @@ QComboBox::down-arrow {{ image: none; }}
 QComboBox QAbstractItemView {{ background: {BG_CARD}; border: 1px solid {BORDER};
     selection-background-color: #555555; color: {TEXT}; padding: 6px; outline: 0; }}
 QPushButton {{ background: rgba(255,255,255,20);
-    border: 1px solid {BORDER}; border-radius: 12px; padding: 10px 16px; font-weight: 500; }}
-QPushButton:hover {{ background: rgba(255,255,255,36); border-color: rgba(255,255,255,80); }}
+    border: none; border-radius: 12px; padding: 10px 16px; font-weight: 500; }}
+QPushButton:hover {{ background: rgba(255,255,255,36); }}
 QPushButton:pressed {{ background: rgba(0,0,0,48); }}
-QPushButton:focus {{ border-color: {ACCENT}; }}
-QPushButton:disabled {{ color: #888888; background: rgba(255,255,255,8); border-color: rgba(255,255,255,20); }}
+QPushButton:disabled {{ color: #888888; background: rgba(255,255,255,8); }}
 QPushButton#primary {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #e3e3e3,stop:1 #c7c7c7);
-    color: #171717; border: 1px solid #eeeeee; font-weight: 700; border-radius: 14px; }}
+    color: #171717; border: none; font-weight: 700; border-radius: 14px; }}
 QPushButton#primary:hover {{ background: {ACCENT_H}; }}
 QPushButton#primary:pressed {{ background: #bbbbbb; }}
-QPushButton#accent {{ background: rgba(255,255,255,30);
-    border: 1px solid rgba(255,255,255,58); font-weight: 600; }}
+QPushButton#accent {{ background: rgba(255,255,255,30); border: none; font-weight: 600; }}
 QPushButton#accent:hover {{ background: rgba(255,255,255,46); }}
-QPushButton#accent:disabled, QPushButton#primary:disabled {{ background: rgba(255,255,255,10); color: #999999; border-color: rgba(255,255,255,24); }}
+QPushButton#accent:disabled, QPushButton#primary:disabled {{ background: rgba(255,255,255,10); color: #999999; }}
 QPushButton#danger {{ color: {RED}; }}
-QPushButton#danger:hover {{ background: #5a3741; border-color: {RED}; }}
+QPushButton#danger:hover {{ background: #5a3741; }}
 QPushButton#small {{ padding: 6px 12px; font-size: 12px; }}
 QPushButton#chip {{ border-radius: 12px; padding: 7px 12px; color: {TEXT_DIM}; }}
-QPushButton#chip:checked {{ background: rgba(255,255,255,25); border-color: rgba(255,255,255,110); color: {TEXT}; }}
+QPushButton#chip:checked {{ background: rgba(255,255,255,25); color: {TEXT}; }}
 QPushButton#disclosure {{ background: transparent; border: none; text-align: left; padding: 10px 0; color: {TEXT_DIM}; }}
 QPushButton#disclosure:focus {{ color: {TEXT}; }}
-QFrame#summary {{ background: rgba(0,0,0,24); border: 1px solid rgba(255,255,255,20); border-radius: 16px; }}
-QListWidget, QTextEdit, QTableWidget {{ background: rgba(0,0,0,45); border: 1px solid {BORDER};
+QFrame#summary {{ background: rgba(0,0,0,24); border: none; border-radius: 16px; }}
+QListWidget, QTextEdit, QTableWidget {{ background: rgba(0,0,0,45); border: none;
     border-radius: 14px; padding: 8px; outline: none; }}
 QListWidget::item {{ padding: 8px; border-radius: 8px; }}
 QListWidget::item:selected, QTableWidget::item:selected {{ background: #555555; }}
@@ -397,8 +390,8 @@ QCheckBox::indicator {{ width: 18px; height: 18px; border: 1px solid {BORDER}; b
 QCheckBox::indicator:checked {{ background: #777777; border: 3px solid #dddddd; }}
 QProgressBar {{ background: {BG_INPUT}; border: none; border-radius: 4px; text-align: center; }}
 QProgressBar::chunk {{ background: #cccccc; border-radius: 4px; }}
-QFrame#card {{ background: rgba(255,255,255,15); border: 1px solid {BORDER}; border-radius: 16px; }}
-QFrame#card_active {{ background: rgba(255,255,255,25); border: 1px solid {ACCENT}; border-radius: 16px; }}
+QFrame#card {{ background: rgba(255,255,255,15); border: none; border-radius: 16px; }}
+QFrame#card_active {{ background: rgba(255,255,255,25); border: none; border-radius: 16px; }}
 QFrame#separator {{ background: rgba(255,255,255,30); border: none; max-height: 1px; }}
 QToolTip, QMenu {{ color: {TEXT}; background: {BG_CARD}; border: 1px solid {BORDER}; padding: 6px; }}
 QMenu::item:selected {{ background: #505050; }}
