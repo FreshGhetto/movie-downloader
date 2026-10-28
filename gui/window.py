@@ -157,6 +157,51 @@ QSplitter::handle {{ background: {BORDER}; width: 2px; border-radius: 1px; }}
 '''
 
 
+class FlowLayout(QVBoxLayout):
+    """Simple horizontal flow that wraps into rows."""
+    pass
+
+
+class PosterCard(QPushButton):
+    def __init__(self, name, year, kind, poster_bytes, data, parent=None):
+        super().__init__(parent)
+        self.data = data
+        self.setFixedSize(120, 200)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(f'''
+            QPushButton {{
+                background: {BG_CARD}; border: 2px solid {BORDER}; border-radius: 12px;
+                padding: 0; text-align: center;
+            }}
+            QPushButton:hover {{ border-color: {ACCENT}; background: {BG_INPUT}; }}
+            QPushButton:checked {{ border-color: {ACCENT}; border-width: 3px; }}
+        ''')
+        self.setCheckable(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        self.poster_label = QLabel()
+        self.poster_label.setFixedSize(108, 150)
+        self.poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.poster_label.setStyleSheet(f'background: {BG_INPUT}; border-radius: 8px; border: none;')
+        if poster_bytes:
+            pix = QPixmap()
+            pix.loadFromData(poster_bytes)
+            self.poster_label.setPixmap(pix.scaled(108, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        layout.addWidget(self.poster_label)
+
+        title_text = name if len(name) <= 16 else name[:14] + '..'
+        label_text = f'{title_text}\n{year or "?"}  {kind}'
+        title_label = QLabel(label_text)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setWordWrap(True)
+        title_label.setStyleSheet(f'color: {TEXT}; font-size: 10px; font-weight: 500; border: none; background: transparent;')
+        title_label.setFixedHeight(32)
+        layout.addWidget(title_label)
+
+
 class DownloadCard(QFrame):
     def __init__(self, name, parent=None):
         super().__init__(parent)
@@ -407,22 +452,25 @@ class Window(QMainWindow):
         self.query.returnPressed.connect(self.search_btn.click)
         layout.addLayout(tmdb_row)
 
-        # Results area
-        results_frame = QHBoxLayout()
-        results_frame.setSpacing(12)
-        self.results = QListWidget()
-        self.results.setIconSize(QSize(50, 75))
-        self.results.setMinimumHeight(140)
-        self.results.setMaximumHeight(180)
-        self.results.currentItemChanged.connect(self._select_result)
-        results_frame.addWidget(self.results, 3)
-        self.synopsis = QTextEdit()
-        self.synopsis.setReadOnly(True)
-        self.synopsis.setPlaceholderText(t('synopsis_hint'))
-        self.synopsis.setMinimumHeight(140)
-        self.synopsis.setMaximumHeight(180)
-        results_frame.addWidget(self.synopsis, 2)
-        layout.addLayout(results_frame)
+        # Results poster grid
+        self.results_scroll = QScrollArea()
+        self.results_scroll.setWidgetResizable(True)
+        self.results_scroll.setMinimumHeight(0)
+        self.results_scroll.setMaximumHeight(230)
+        self.results_scroll.setVisible(False)
+        self.results_container = QWidget()
+        self.results_layout = QHBoxLayout(self.results_container)
+        self.results_layout.setContentsMargins(0, 0, 0, 0)
+        self.results_layout.setSpacing(10)
+        self.results_layout.addStretch()
+        self.results_scroll.setWidget(self.results_container)
+        self.poster_cards = []
+        self.no_results_label = QLabel(t('no_results'))
+        self.no_results_label.setObjectName('hint')
+        self.no_results_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.no_results_label.setVisible(False)
+        layout.addWidget(self.no_results_label)
+        layout.addWidget(self.results_scroll)
 
         # Options
         opts_label = QLabel(t('download_options'))
@@ -817,29 +865,35 @@ class Window(QMainWindow):
             return
         key = self.settings['tmdb_key']
         def done(items):
-            self.results.clear()
+            for card in self.poster_cards:
+                self.results_layout.removeWidget(card)
+                card.deleteLater()
+            self.poster_cards.clear()
+
+            if not items:
+                self.results_scroll.setVisible(False)
+                self.no_results_label.setVisible(True)
+                return
+
+            self.no_results_label.setVisible(False)
+            self.results_scroll.setVisible(True)
             for data in items:
                 name = data.get('title') or data.get('name') or t('untitled')
                 year = (data.get('release_date') or data.get('first_air_date') or '')[:4]
                 kind_tag = t('movie') if data.get('_kind') == 'movie' else t('tv_show')
-                item = QListWidgetItem(f'{name} ({year or "?"}) - {kind_tag}')
-                item.setData(Qt.ItemDataRole.UserRole, data)
-                if data.get('poster_bytes'):
-                    pix = QPixmap()
-                    pix.loadFromData(data['poster_bytes'])
-                    item.setIcon(QIcon(pix))
-                self.results.addItem(item)
-            if not items:
-                self.synopsis.setText(t('no_results'))
+                card = PosterCard(name, year, kind_tag, data.get('poster_bytes'), data)
+                card.clicked.connect(lambda checked, c=card: self._select_poster(c))
+                self.results_layout.insertWidget(self.results_layout.count() - 1, card)
+                self.poster_cards.append(card)
         self._task(lambda: search_tmdb_both(query, key), done, self.search_btn)
 
-    def _select_result(self, item, previous):
-        if not item:
-            return
-        data = item.data(Qt.ItemDataRole.UserRole)
+    def _select_poster(self, card):
+        for c in self.poster_cards:
+            if c is not card:
+                c.setChecked(False)
+        data = card.data
         self.title_input.setText(data.get('title') or data.get('name') or '')
         self.year_input.setText((data.get('release_date') or data.get('first_air_date') or '')[:4])
-        self.synopsis.setText(data.get('overview') or t('no_synopsis'))
         if data.get('_kind') == 'tv':
             self.kind.setCurrentIndex(1)
         elif data.get('_kind') == 'movie':
