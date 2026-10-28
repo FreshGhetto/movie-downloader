@@ -15,3 +15,14 @@
 - Nove test automatici superati. Build Windows PyInstaller in `dist/MovieDownloader`; EXE avviato, finestra Movie Downloader presente e processo responsivo. Verifica strumenti riuscita anche nell’EXE. PySide6 6.8.3 è fissato per evitare l’errore DLL osservato nella build con 6.12.0.
 
 Ricerca reale TMDb e download da servizi esterni non verificati: mancano la chiave API e un URL autorizzato fornito dall’utente. Pausa/ripresa disponibile come arresto e riavvio con parziali; la compatibilità dipende dalla sorgente. Nessuna garanzia di supporto di ogni sito da parte della copia yt-dlp 2025.09.26.
+
+
+## Redesign 28 ottobre 2026
+
+- Tema scuro fumé con superfici semitrasparenti interne, bordi sottili, icone vettoriali e accenti azzurri. Comandi finestra nativi di Windows.
+- Ricerca e metadati a sinistra, opzioni download a destra; disposizione verticale su finestre più strette. Locandine con altezza protetta e scorrimento orizzontale.
+- Riepilogo del titolo selezionato, contatore della coda, interruttore sottotitoli, selettori rapidi italiano/inglese e opzioni avanzate richiudibili. Restano disponibili lingue personalizzate e frammenti.
+- Localizzazioni inglese/italiano; preferenze, cartelle e coda esistenti mantenute.
+- 19 test automatici superati. Layout verificato a 1440×900, 1060×740 e 860×600 senza scorrimento orizzontale della pagina.
+- Ricerca TMDb reale verificata: 12 risultati con locandine. Analisi, coda e download di un video sintetico da localhost completati con configurazione di test isolata.
+- Build PyInstaller creata in `dist-aggiornata/MovieDownloader`; avvio riuscito, finestra presente e processo responsivo. Aprire `Avvia aggiornato.bat` per questa build oppure `Avvia.bat` per il codice sorgente.
