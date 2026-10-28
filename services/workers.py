@@ -87,5 +87,21 @@ def update_ytdlp(exe_path):
     p = subprocess.run([exe_path, '--update'], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120, **FLAGS)
     output = (p.stdout + '\n' + p.stderr).strip()
     if p.returncode:
-        raise ValueError('Aggiornamento fallito:\n' + output[-2000:])
+        raise ValueError(output[-2000:])
     return output
+
+def check_app_update(current_version):
+    try:
+        r = requests.get('https://api.github.com/repos/FreshGhetto/movie-downloader/releases/latest', timeout=15)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        tag = data.get('tag_name', '').lstrip('v')
+        if not tag:
+            return None
+        if tag != current_version:
+            url = data.get('html_url', '')
+            return {'version': tag, 'url': url}
+        return {'version': tag, 'url': '', 'up_to_date': True}
+    except requests.RequestException:
+        return None

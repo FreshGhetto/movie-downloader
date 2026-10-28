@@ -21,21 +21,22 @@ Built with **Python 3.11+**, **PySide6**, and **yt-dlp**.
 - **Download history** — full log of past downloads
 - **System tray** — minimizes to tray with toast notifications
 - **Drag & drop** — drop a URL to start
-- **Auto-update yt-dlp** — one click in Settings
+- **Auto-update** — checks for new releases on startup, one-click yt-dlp update in Settings
+- **Multi-language** — English (default) and Italian, switchable in Settings
 - **Pause / Resume / Cancel** — full queue control
 - **Smart naming** — Unicode, reserved names, collision numbering
 - **Portable** — builds to standalone .exe with PyInstaller
 
 ## Screenshot
 
-![Movie Downloader](Verifica-interfaccia.png)
+![Movie Downloader](screenshot.png)
 
 ## Quick Start
 
 ### From source
 
 ```bash
-git clone https://github.com/Larpbase/movie-downloader.git
+git clone https://github.com/FreshGhetto/movie-downloader.git
 cd movie-downloader
 
 py -3.11 -m venv .venv
