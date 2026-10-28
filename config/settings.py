@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MovieDownloader'
-DEFAULTS = {'movie_dir': 'E:/Film', 'tv_dir': 'E:/Serie TV', 'tmdb_key': '', 'ffmpeg': '', 'fragments': 16, 'subtitles': True, 'sub_langs': 'it,en', 'custom_paths': [], 'language': 'en', 'auto_update': True}
+DEFAULTS = {'movie_dir': '', 'tv_dir': '', 'tmdb_key': '', 'ffmpeg': '', 'fragments': 16, 'subtitles': True, 'sub_langs': 'it,en', 'custom_paths': [], 'language': 'en', 'auto_update': True}
 
 def load():
     try:
