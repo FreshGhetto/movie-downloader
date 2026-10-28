@@ -1,13 +1,16 @@
 import logging, sys, datetime
 from pathlib import Path
-from PySide6.QtCore import Qt, QProcess, QTimer, QSize, QUrl
-from PySide6.QtGui import QIcon, QPixmap, QDesktopServices, QAction, QDragEnterEvent, QDropEvent, QPainter, QColor, QFont, QPen
+from PySide6.QtCore import Qt, QProcess, QTimer, QSize, QUrl, QRectF
+from PySide6.QtGui import (
+    QIcon, QPixmap, QDesktopServices, QAction, QDragEnterEvent, QDropEvent,
+    QPainter, QColor, QFont, QPen, QBrush, QLinearGradient, QPainterPath,
+)
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QComboBox, QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QCheckBox, QListWidget, QListWidgetItem, QTextEdit, QSplitter, QSystemTrayIcon,
     QMenu, QApplication, QStackedWidget, QScrollArea, QFrame, QProgressBar, QGridLayout,
-    QFormLayout, QSpacerItem, QSizePolicy,
+    QFormLayout, QSpacerItem, QSizePolicy, QGraphicsDropShadowEffect,
 )
 from config.settings import load, save, load_queue, save_queue, load_history, save_history, ROOT
 from config.i18n import t, set_language, LANGUAGES, current as current_lang
@@ -17,66 +20,140 @@ from services.workers import Task, analyze, search_tmdb_both, update_ytdlp, chec
 
 BASE = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
 
-STYLE = '''
-* { font-family: "Segoe UI", sans-serif; }
-QMainWindow, QWidget#root { background: #0d1117; color: #e6edf3; }
-QWidget#sidebar { background: #010409; border-right: 1px solid #21262d; }
-QWidget#page { background: #0d1117; }
+# Rubberhose palette — soft, warm dark
+BG       = '#1a1a2e'
+BG_CARD  = '#22223a'
+BG_INPUT = '#2a2a45'
+BG_NAV   = '#16162b'
+ACCENT   = '#6c63ff'
+ACCENT_H = '#8b83ff'
+GREEN    = '#57cc99'
+GREEN_H  = '#80e5b8'
+RED      = '#ff6b6b'
+YELLOW   = '#ffd166'
+TEXT     = '#eaeaf2'
+TEXT_DIM = '#9e9eb8'
+BORDER   = '#32325a'
 
-QPushButton#nav { background: transparent; color: #8b949e; border: none; border-left: 3px solid transparent;
-    text-align: left; padding: 12px 20px; font-size: 13px; font-weight: 500; }
-QPushButton#nav:hover { background: #161b22; color: #e6edf3; }
-QPushButton#nav:checked { background: #161b22; color: #e6edf3; border-left: 3px solid #2f81f7; }
+STYLE = f'''
+* {{ font-family: "Segoe UI", "Inter", sans-serif; }}
+QMainWindow {{ background: {BG}; }}
+QWidget#root {{ background: {BG}; color: {TEXT}; }}
+QWidget#sidebar {{ background: {BG_NAV}; border-top-right-radius: 0px; border-bottom-right-radius: 0px; }}
+QWidget#page {{ background: {BG}; }}
 
-QLabel { color: #e6edf3; }
-QLabel#page_title { font-size: 20px; font-weight: 700; color: #e6edf3; padding-bottom: 4px; }
-QLabel#section { font-size: 13px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; padding-top: 12px; }
-QLabel#hint { color: #8b949e; font-size: 12px; }
-QLabel#status_bar { color: #8b949e; font-size: 11px; padding: 6px 16px; }
-QLabel#empty { color: #484f58; font-size: 14px; padding: 40px; }
-QLabel#version { color: #484f58; font-size: 11px; padding: 8px 20px; }
+QPushButton#nav {{
+    background: transparent; color: {TEXT_DIM}; border: none;
+    border-radius: 14px; text-align: left; padding: 11px 18px;
+    font-size: 13px; font-weight: 500; margin: 2px 10px;
+}}
+QPushButton#nav:hover {{ background: {BG_CARD}; color: {TEXT}; }}
+QPushButton#nav:checked {{ background: {ACCENT}; color: #ffffff; }}
 
-QLineEdit, QComboBox { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px;
-    color: #e6edf3; font-size: 13px; selection-background-color: #2f81f7; }
-QLineEdit:focus, QComboBox:focus { border-color: #2f81f7; }
-QComboBox::drop-down { border: none; padding-right: 8px; }
-QComboBox QAbstractItemView { background: #161b22; border: 1px solid #30363d; selection-background-color: #2f81f7; }
+QLabel {{ color: {TEXT}; }}
+QLabel#page_title {{ font-size: 22px; font-weight: 700; color: {TEXT}; }}
+QLabel#section {{ font-size: 12px; font-weight: 600; color: {TEXT_DIM}; text-transform: uppercase; letter-spacing: 1.2px; padding-top: 14px; }}
+QLabel#hint {{ color: {TEXT_DIM}; font-size: 12px; }}
+QLabel#status_bar {{ color: {TEXT_DIM}; font-size: 11px; padding: 8px 20px; }}
+QLabel#empty {{ color: {TEXT_DIM}; font-size: 14px; padding: 40px; }}
+QLabel#version {{ color: {TEXT_DIM}; font-size: 10px; padding: 6px 18px; }}
+QLabel#logo {{ font-size: 15px; font-weight: 800; color: {TEXT}; padding: 18px 18px 22px 18px; }}
 
-QPushButton { background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 8px 16px;
-    color: #e6edf3; font-size: 13px; font-weight: 500; }
-QPushButton:hover { background: #30363d; border-color: #484f58; }
-QPushButton:disabled { color: #484f58; background: #161b22; border-color: #21262d; }
-QPushButton#primary { background: #238636; border-color: #2ea043; color: #ffffff; }
-QPushButton#primary:hover { background: #2ea043; border-color: #3fb950; }
-QPushButton#accent { background: #1f6feb; border-color: #388bfd; color: #ffffff; }
-QPushButton#accent:hover { background: #388bfd; border-color: #58a6ff; }
-QPushButton#danger { background: #21262d; border-color: #f85149; color: #f85149; }
-QPushButton#danger:hover { background: #da3633; border-color: #f85149; color: #ffffff; }
-QPushButton#small { padding: 4px 10px; font-size: 11px; border-radius: 4px; }
+QLineEdit, QComboBox {{
+    background: {BG_INPUT}; border: 2px solid {BORDER}; border-radius: 14px;
+    padding: 10px 16px; color: {TEXT}; font-size: 13px;
+    selection-background-color: {ACCENT};
+}}
+QLineEdit:focus, QComboBox:focus {{ border-color: {ACCENT}; }}
+QComboBox::drop-down {{ border: none; padding-right: 10px; }}
+QComboBox QAbstractItemView {{
+    background: {BG_INPUT}; border: 2px solid {BORDER}; border-radius: 12px;
+    selection-background-color: {ACCENT}; color: {TEXT}; padding: 4px;
+}}
 
-QListWidget { background: #161b22; border: 1px solid #30363d; border-radius: 6px; }
-QListWidget::item { padding: 4px; border-radius: 4px; }
-QListWidget::item:selected { background: #1f6feb; }
-QListWidget::item:hover { background: #21262d; }
-QTextEdit { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 8px;
-    color: #e6edf3; font-size: 13px; }
-QTableWidget { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; gridline-color: #21262d; }
-QTableWidget::item { padding: 6px 8px; border-bottom: 1px solid #21262d; }
-QTableWidget::item:selected { background: #1f6feb; }
-QHeaderView::section { background: #161b22; border: none; border-bottom: 1px solid #30363d;
-    padding: 8px 8px; font-weight: 600; color: #8b949e; font-size: 12px; }
-QScrollArea { border: none; background: transparent; }
+QPushButton {{
+    background: {BG_CARD}; border: 2px solid {BORDER}; border-radius: 14px;
+    padding: 10px 20px; color: {TEXT}; font-size: 13px; font-weight: 500;
+}}
+QPushButton:hover {{ background: {BG_INPUT}; border-color: {ACCENT}; }}
+QPushButton:disabled {{ color: {TEXT_DIM}; background: {BG_NAV}; border-color: {BORDER}; }}
+QPushButton#primary {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {GREEN},stop:1 #38b2ac);
+    border: none; color: #ffffff; border-radius: 16px; font-weight: 600;
+}}
+QPushButton#primary:hover {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {GREEN_H},stop:1 #4fd1c5);
+}}
+QPushButton#accent {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {ACCENT},stop:1 #a78bfa);
+    border: none; color: #ffffff; border-radius: 16px; font-weight: 600;
+}}
+QPushButton#accent:hover {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {ACCENT_H},stop:1 #c4b5fd);
+}}
+QPushButton#danger {{ background: {BG_CARD}; border-color: {RED}; color: {RED}; border-radius: 14px; }}
+QPushButton#danger:hover {{ background: {RED}; color: #ffffff; }}
+QPushButton#small {{ padding: 6px 14px; font-size: 11px; border-radius: 10px; }}
 
-QCheckBox { spacing: 8px; color: #e6edf3; font-size: 13px; }
-QCheckBox::indicator { width: 16px; height: 16px; border-radius: 3px; border: 1px solid #30363d; background: #161b22; }
-QCheckBox::indicator:checked { background: #2f81f7; border-color: #2f81f7; }
+QListWidget {{
+    background: {BG_CARD}; border: 2px solid {BORDER}; border-radius: 14px;
+    padding: 4px; outline: none;
+}}
+QListWidget::item {{ padding: 6px 8px; border-radius: 10px; }}
+QListWidget::item:selected {{ background: {ACCENT}; color: #ffffff; }}
+QListWidget::item:hover {{ background: {BG_INPUT}; }}
 
-QProgressBar { background: #21262d; border: none; border-radius: 4px; height: 8px; text-align: center; }
-QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #1f6feb,stop:1 #58a6ff); border-radius: 4px; }
+QTextEdit {{
+    background: {BG_CARD}; border: 2px solid {BORDER}; border-radius: 14px;
+    padding: 10px; color: {TEXT}; font-size: 13px;
+}}
 
-QFrame#card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; }
-QFrame#card_active { background: #161b22; border: 1px solid #1f6feb; border-radius: 8px; }
-QFrame#separator { background: #21262d; max-height: 1px; }
+QTableWidget {{
+    background: {BG_CARD}; border: 2px solid {BORDER}; border-radius: 14px;
+    gridline-color: {BORDER}; outline: none;
+}}
+QTableWidget::item {{ padding: 8px 10px; border-bottom: 1px solid {BORDER}; }}
+QTableWidget::item:selected {{ background: {ACCENT}; }}
+QHeaderView::section {{
+    background: {BG_INPUT}; border: none; border-bottom: 2px solid {BORDER};
+    padding: 10px 10px; font-weight: 600; color: {TEXT_DIM}; font-size: 12px;
+    border-top-left-radius: 12px; border-top-right-radius: 12px;
+}}
+
+QScrollArea {{ border: none; background: transparent; }}
+QScrollBar:vertical {{
+    background: transparent; width: 8px; margin: 4px 2px; border-radius: 4px;
+}}
+QScrollBar::handle:vertical {{
+    background: {BORDER}; border-radius: 4px; min-height: 30px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {TEXT_DIM}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+
+QCheckBox {{ spacing: 10px; color: {TEXT}; font-size: 13px; }}
+QCheckBox::indicator {{
+    width: 20px; height: 20px; border-radius: 6px;
+    border: 2px solid {BORDER}; background: {BG_INPUT};
+}}
+QCheckBox::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
+
+QProgressBar {{
+    background: {BG_INPUT}; border: none; border-radius: 6px; height: 10px; text-align: center;
+}}
+QProgressBar::chunk {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 {ACCENT},stop:1 #a78bfa);
+    border-radius: 6px;
+}}
+
+QFrame#card {{
+    background: {BG_CARD}; border: 2px solid {BORDER}; border-radius: 16px;
+}}
+QFrame#card_active {{
+    background: {BG_CARD}; border: 2px solid {ACCENT}; border-radius: 16px;
+}}
+QFrame#separator {{ background: {BORDER}; max-height: 1px; }}
+
+QSplitter::handle {{ background: {BORDER}; width: 2px; border-radius: 1px; }}
 '''
 
 
@@ -84,59 +161,60 @@ class DownloadCard(QFrame):
     def __init__(self, name, parent=None):
         super().__init__(parent)
         self.setObjectName('card')
-        self.setFixedHeight(76)
+        self.setFixedHeight(82)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(4)
+        layout.setContentsMargins(18, 12, 18, 12)
+        layout.setSpacing(6)
+
         top = QHBoxLayout()
-        top.setSpacing(8)
+        top.setSpacing(10)
         self.name_label = QLabel(name)
-        self.name_label.setStyleSheet('font-weight:600; font-size:13px;')
+        self.name_label.setStyleSheet(f'font-weight:600; font-size:13px; color:{TEXT};')
         top.addWidget(self.name_label, 1)
         self.status_label = QLabel(t('queued'))
-        self.status_label.setStyleSheet('color:#8b949e; font-size:12px;')
+        self.status_label.setStyleSheet(f'color:{TEXT_DIM}; font-size:12px; font-weight:500;')
         top.addWidget(self.status_label)
         self.info_label = QLabel('')
-        self.info_label.setStyleSheet('color:#8b949e; font-size:11px;')
+        self.info_label.setStyleSheet(f'color:{TEXT_DIM}; font-size:11px;')
         top.addWidget(self.info_label)
         layout.addLayout(top)
+
         self.bar = QProgressBar()
         self.bar.setRange(0, 1000)
         self.bar.setValue(0)
         self.bar.setTextVisible(False)
-        self.bar.setFixedHeight(6)
+        self.bar.setFixedHeight(8)
         layout.addWidget(self.bar)
 
     def update_progress(self, percent, size, speed, eta):
         self.bar.setValue(int(percent * 10))
         parts = []
         if size > 0:
-            parts.append(f'{size / 1048576:.1f} MiB')
+            parts.append(f'{size / 1048576:.1f} MB')
         if speed > 0:
-            parts.append(f'{speed / 1048576:.1f} MiB/s')
+            parts.append(f'{speed / 1048576:.1f} MB/s')
         if eta is not None:
             m, s = divmod(int(eta), 60)
             parts.append(f'{m}:{s:02d}')
-        self.info_label.setText(' · '.join(parts))
+        self.info_label.setText('  '.join(parts))
         self.status_label.setText(f'{percent:.0f}%')
 
     def set_status(self, status):
         self.status_label.setText(status)
         self.info_label.setText('')
         colors = {
-            t('completed'): '#3fb950', t('error_log'): '#f85149',
-            t('error_start'): '#f85149', t('cancelled'): '#d29922',
-            t('paused'): '#d29922', t('downloading'): '#58a6ff',
-            t('processing'): '#a371f7',
+            t('completed'): GREEN, t('error_log'): RED,
+            t('error_start'): RED, t('cancelled'): YELLOW,
+            t('paused'): YELLOW, t('downloading'): ACCENT,
+            t('processing'): '#a78bfa',
         }
-        color = colors.get(status, '#8b949e')
+        color = colors.get(status, TEXT_DIM)
         self.status_label.setStyleSheet(f'color:{color}; font-size:12px; font-weight:600;')
         if status == t('completed'):
             self.bar.setValue(1000)
-            self.bar.setStyleSheet('QProgressBar::chunk{background:#3fb950;border-radius:4px;}')
-            self.setObjectName('card')
+            self.bar.setStyleSheet(f'QProgressBar::chunk{{background:{GREEN};border-radius:6px;}}')
         elif status in (t('error_log'), t('error_start')):
-            self.bar.setStyleSheet('QProgressBar::chunk{background:#f85149;border-radius:4px;}')
+            self.bar.setStyleSheet(f'QProgressBar::chunk{{background:{RED};border-radius:6px;}}')
 
 
 class Window(QMainWindow):
@@ -177,27 +255,28 @@ class Window(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        # Sidebar
         sidebar = QWidget()
         sidebar.setObjectName('sidebar')
-        sidebar.setFixedWidth(180)
+        sidebar.setFixedWidth(170)
         sb_layout = QVBoxLayout(sidebar)
-        sb_layout.setContentsMargins(0, 16, 0, 8)
+        sb_layout.setContentsMargins(0, 0, 0, 8)
         sb_layout.setSpacing(0)
 
-        logo = QLabel('  Movie\n  Downloader')
-        logo.setStyleSheet('font-size:16px; font-weight:800; color:#e6edf3; padding:0 16px 16px 16px; line-height:1.2;')
+        logo = QLabel('Movie\nDownloader')
+        logo.setObjectName('logo')
         sb_layout.addWidget(logo)
 
         self.nav_buttons = []
         nav_items = [
-            ('nav_download', '⬇'),
-            ('nav_queue', '☰'),
-            ('nav_history', '⏳'),
-            ('nav_paths', '\U0001F4C1'),
-            ('nav_settings', '⚙'),
+            ('nav_download',),
+            ('nav_queue',),
+            ('nav_history',),
+            ('nav_paths',),
+            ('nav_settings',),
         ]
-        for key, icon in nav_items:
-            btn = QPushButton(f'  {icon}   {t(key)}')
+        for (key,) in nav_items:
+            btn = QPushButton(t(key))
             btn.setObjectName('nav')
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -207,13 +286,13 @@ class Window(QMainWindow):
             self.nav_buttons.append(btn)
 
         sb_layout.addStretch()
-        self.version_label = QLabel(f'  v{VERSION}')
+        self.version_label = QLabel(f'v{VERSION}')
         self.version_label.setObjectName('version')
         sb_layout.addWidget(self.version_label)
         main_layout.addWidget(sidebar)
 
+        # Content area
         self.stack = QStackedWidget()
-        main_layout.addWidget(self.stack, 1)
 
         self._build_download_page()
         self._build_queue_page()
@@ -235,8 +314,6 @@ class Window(QMainWindow):
         sep.setFrameShape(QFrame.Shape.HLine)
         wrapper.addWidget(sep)
         wrapper.addWidget(self.status_bar)
-
-        main_layout.removeWidget(self.stack)
         main_layout.addWidget(container, 1)
 
         self.process = QProcess(self)
@@ -257,20 +334,24 @@ class Window(QMainWindow):
         pix.fill(QColor(0, 0, 0, 0))
         p = QPainter(pix)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setBrush(QColor('#1f6feb'))
+        grad = QLinearGradient(0, 0, 64, 64)
+        grad.setColorAt(0, QColor(ACCENT))
+        grad.setColorAt(1, QColor('#a78bfa'))
+        p.setBrush(QBrush(grad))
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawRoundedRect(4, 4, 56, 56, 14, 14)
-        p.setPen(QPen(QColor('#ffffff'), 3))
+        p.drawRoundedRect(2, 2, 60, 60, 18, 18)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor('#ffffff'))
-        pts = [
-            (32, 42), (22, 30), (26, 30),
-            (26, 18), (38, 18), (38, 30),
-            (42, 30),
-        ]
-        from PySide6.QtGui import QPolygon
-        from PySide6.QtCore import QPoint
-        poly = QPolygon([QPoint(x, y) for x, y in pts])
-        p.drawPolygon(poly)
+        path = QPainterPath()
+        path.moveTo(32, 14)
+        path.lineTo(32, 40)
+        path.moveTo(32, 40)
+        p.setPen(QPen(QColor('#ffffff'), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(32, 14, 32, 40)
+        p.drawLine(22, 32, 32, 42)
+        p.drawLine(42, 32, 32, 42)
+        p.setPen(QPen(QColor('#ffffff'), 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(18, 50, 46, 50)
         p.end()
         self._app_icon = QIcon(pix)
 
@@ -287,18 +368,19 @@ class Window(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setWidget(page)
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(18)
 
         title = QLabel(t('nav_download'))
         title.setObjectName('page_title')
         layout.addWidget(title)
 
+        # URL row
         url_row = QHBoxLayout()
-        url_row.setSpacing(8)
+        url_row.setSpacing(10)
         self.url = QLineEdit()
         self.url.setPlaceholderText(t('url_placeholder'))
-        self.url.setMinimumHeight(40)
+        self.url.setMinimumHeight(44)
         url_row.addWidget(self.url, 1)
         paste_btn = QPushButton(t('paste'))
         paste_btn.clicked.connect(self._paste_url)
@@ -313,8 +395,9 @@ class Window(QMainWindow):
         self.res_label.setObjectName('hint')
         layout.addWidget(self.res_label)
 
+        # TMDb search
         tmdb_row = QHBoxLayout()
-        tmdb_row.setSpacing(8)
+        tmdb_row.setSpacing(10)
         self.query = QLineEdit()
         self.query.setPlaceholderText(t('tmdb_placeholder'))
         tmdb_row.addWidget(self.query, 1)
@@ -324,50 +407,55 @@ class Window(QMainWindow):
         self.query.returnPressed.connect(self.search_btn.click)
         layout.addLayout(tmdb_row)
 
-        splitter = QSplitter()
+        # Results area
+        results_frame = QHBoxLayout()
+        results_frame.setSpacing(12)
         self.results = QListWidget()
-        self.results.setIconSize(QSize(62, 92))
+        self.results.setIconSize(QSize(50, 75))
+        self.results.setMinimumHeight(140)
+        self.results.setMaximumHeight(180)
         self.results.currentItemChanged.connect(self._select_result)
-        splitter.addWidget(self.results)
+        results_frame.addWidget(self.results, 3)
         self.synopsis = QTextEdit()
         self.synopsis.setReadOnly(True)
         self.synopsis.setPlaceholderText(t('synopsis_hint'))
-        self.synopsis.setMaximumHeight(160)
-        splitter.addWidget(self.synopsis)
-        splitter.setSizes([400, 300])
-        layout.addWidget(splitter)
+        self.synopsis.setMinimumHeight(140)
+        self.synopsis.setMaximumHeight(180)
+        results_frame.addWidget(self.synopsis, 2)
+        layout.addLayout(results_frame)
 
+        # Options
         opts_label = QLabel(t('download_options'))
         opts_label.setObjectName('section')
         layout.addWidget(opts_label)
 
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(10)
+        form = QGridLayout()
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
 
-        grid.addWidget(QLabel(t('title')), 0, 0)
+        form.addWidget(QLabel(t('title')), 0, 0)
         self.title_input = QLineEdit()
-        grid.addWidget(self.title_input, 0, 1, 1, 2)
-        grid.addWidget(QLabel(t('year')), 0, 3)
+        form.addWidget(self.title_input, 0, 1, 1, 2)
+        form.addWidget(QLabel(t('year')), 0, 3)
         self.year_input = QLineEdit()
         self.year_input.setMaxLength(4)
-        self.year_input.setMaximumWidth(70)
-        grid.addWidget(self.year_input, 0, 4)
+        self.year_input.setMaximumWidth(80)
+        form.addWidget(self.year_input, 0, 4)
 
-        grid.addWidget(QLabel(t('category')), 1, 0)
+        form.addWidget(QLabel(t('category')), 1, 0)
         self.kind = QComboBox()
         self.kind.addItems([t('movie'), t('tv_show')])
         self.kind.currentIndexChanged.connect(self._change_kind)
-        grid.addWidget(self.kind, 1, 1)
-        grid.addWidget(QLabel(t('quality')), 1, 2)
+        form.addWidget(self.kind, 1, 1)
+        form.addWidget(QLabel(t('quality')), 1, 2)
         self.quality = QComboBox()
-        for label, val in [(t('best'),'best'),(t('up_to_1080'),'1080'),(t('up_to_720'),'720'),(t('up_to_480'),'480'),(t('audio_only'),'audio')]:
+        for label, val in [(t('best'), 'best'), (t('up_to_1080'), '1080'), (t('up_to_720'), '720'), (t('up_to_480'), '480'), (t('audio_only'), 'audio')]:
             self.quality.addItem(label, val)
-        grid.addWidget(self.quality, 1, 3, 1, 2)
+        form.addWidget(self.quality, 1, 3, 1, 2)
 
-        grid.addWidget(QLabel(t('destination')), 2, 0)
+        form.addWidget(QLabel(t('destination')), 2, 0)
         dest_row = QHBoxLayout()
-        dest_row.setSpacing(6)
+        dest_row.setSpacing(8)
         self.path_combo = QComboBox()
         self.path_combo.setMinimumWidth(120)
         self.path_combo.addItem(t('custom'), '')
@@ -381,11 +469,11 @@ class Window(QMainWindow):
         browse_btn = QPushButton(t('browse'))
         browse_btn.clicked.connect(self._choose_directory)
         dest_row.addWidget(browse_btn)
-        grid.addLayout(dest_row, 2, 1, 1, 4)
+        form.addLayout(dest_row, 2, 1, 1, 4)
 
-        grid.addWidget(QLabel(t('subtitles')), 3, 0)
+        form.addWidget(QLabel(t('subtitles')), 3, 0)
         sub_row = QHBoxLayout()
-        sub_row.setSpacing(8)
+        sub_row.setSpacing(10)
         self.subs_check = QCheckBox()
         self.subs_check.setChecked(self.settings.get('subtitles', True))
         sub_row.addWidget(self.subs_check)
@@ -394,7 +482,7 @@ class Window(QMainWindow):
         self.sub_langs.setEditable(True)
         self.sub_langs.addItems(['en', 'it', 'it,en', 'en,es', 'en,fr', 'en,de'])
         self.sub_langs.setCurrentText(self.settings.get('sub_langs', 'it,en'))
-        self.sub_langs.setMinimumWidth(100)
+        self.sub_langs.setMinimumWidth(110)
         sub_row.addWidget(self.sub_langs)
         sub_row.addStretch()
         sub_row.addWidget(QLabel(t('fragments')))
@@ -402,13 +490,13 @@ class Window(QMainWindow):
         self.fragments.addItems(['1', '4', '8', '16'])
         self.fragments.setCurrentText(str(self.settings.get('fragments', 16)))
         sub_row.addWidget(self.fragments)
-        grid.addLayout(sub_row, 3, 1, 1, 4)
+        form.addLayout(sub_row, 3, 1, 1, 4)
 
-        layout.addLayout(grid)
+        layout.addLayout(form)
 
         add_btn = QPushButton(t('add_to_queue'))
         add_btn.setObjectName('primary')
-        add_btn.setMinimumHeight(42)
+        add_btn.setMinimumHeight(48)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.clicked.connect(self._add_job)
         layout.addWidget(add_btn)
@@ -421,8 +509,8 @@ class Window(QMainWindow):
         page = QWidget()
         page.setObjectName('page')
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(14)
 
         top = QHBoxLayout()
         title = QLabel(t('nav_queue'))
@@ -449,7 +537,7 @@ class Window(QMainWindow):
         self.queue_container = QWidget()
         self.queue_layout = QVBoxLayout(self.queue_container)
         self.queue_layout.setContentsMargins(0, 0, 0, 0)
-        self.queue_layout.setSpacing(6)
+        self.queue_layout.setSpacing(8)
         self.queue_layout.addStretch()
         scroll.setWidget(self.queue_container)
         layout.addWidget(scroll, 1)
@@ -466,8 +554,8 @@ class Window(QMainWindow):
         page = QWidget()
         page.setObjectName('page')
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(14)
 
         top = QHBoxLayout()
         title = QLabel(t('nav_history'))
@@ -499,8 +587,8 @@ class Window(QMainWindow):
         page = QWidget()
         page.setObjectName('page')
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(14)
 
         title = QLabel(t('nav_paths'))
         title.setObjectName('page_title')
@@ -518,7 +606,7 @@ class Window(QMainWindow):
         layout.addWidget(self.paths_table, 1)
 
         add_row = QHBoxLayout()
-        add_row.setSpacing(8)
+        add_row.setSpacing(10)
         self.path_name_input = QLineEdit()
         self.path_name_input.setPlaceholderText(t('path_name_hint'))
         add_row.addWidget(self.path_name_input)
@@ -553,8 +641,8 @@ class Window(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setWidget(page)
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(10)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(12)
 
         title = QLabel(t('nav_settings'))
         title.setObjectName('page_title')
@@ -565,8 +653,8 @@ class Window(QMainWindow):
         layout.addWidget(section)
 
         form = QFormLayout()
-        form.setHorizontalSpacing(16)
-        form.setVerticalSpacing(10)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(12)
         self.s_tmdb = QLineEdit(self.settings.get('tmdb_key', ''))
         self.s_tmdb.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow(t('tmdb_key_label'), self.s_tmdb)
@@ -585,8 +673,8 @@ class Window(QMainWindow):
         layout.addWidget(section2)
 
         form2 = QFormLayout()
-        form2.setHorizontalSpacing(16)
-        form2.setVerticalSpacing(10)
+        form2.setHorizontalSpacing(18)
+        form2.setVerticalSpacing(12)
         self.s_movie = QLineEdit(self.settings.get('movie_dir', ''))
         self.s_movie.setPlaceholderText(t('choose_folder'))
         form2.addRow(t('movie_folder'), self.s_movie)
@@ -600,15 +688,15 @@ class Window(QMainWindow):
         layout.addWidget(section3)
 
         form3 = QFormLayout()
-        form3.setHorizontalSpacing(16)
-        form3.setVerticalSpacing(10)
+        form3.setHorizontalSpacing(18)
+        form3.setVerticalSpacing(12)
         self.s_ffmpeg = QLineEdit(self.settings.get('ffmpeg', ''))
         self.s_ffmpeg.setPlaceholderText(t('ffmpeg_hint'))
         form3.addRow(t('ffmpeg_label'), self.s_ffmpeg)
         layout.addLayout(form3)
 
         tools_row = QHBoxLayout()
-        tools_row.setSpacing(8)
+        tools_row.setSpacing(10)
         upd_yt = QPushButton(t('update_ytdlp'))
         upd_yt.clicked.connect(self._update_ytdlp_click)
         tools_row.addWidget(upd_yt)
@@ -620,10 +708,10 @@ class Window(QMainWindow):
         tools_row.addWidget(self.s_tools_label, 1)
         layout.addLayout(tools_row)
 
-        layout.addSpacing(16)
+        layout.addSpacing(18)
         save_btn = QPushButton(t('save_settings'))
         save_btn.setObjectName('primary')
-        save_btn.setMinimumHeight(40)
+        save_btn.setMinimumHeight(44)
         save_btn.clicked.connect(self._save_settings)
         layout.addWidget(save_btn)
 
@@ -694,7 +782,7 @@ class Window(QMainWindow):
         ff = find_ffmpeg(self.settings['ffmpeg'])
         def done(data):
             self.versions_ok = True
-            self.status_bar.setText(f'yt-dlp {data[0]}  ·  {data[1]}')
+            self.status_bar.setText(f'yt-dlp {data[0]}   {data[1]}')
             self.logger.info(self.status_bar.text())
         self._task(lambda: (version(self.exe), version(ff)), done)
 
@@ -733,8 +821,8 @@ class Window(QMainWindow):
             for data in items:
                 name = data.get('title') or data.get('name') or t('untitled')
                 year = (data.get('release_date') or data.get('first_air_date') or '')[:4]
-                icon = '\U0001f3ac' if data.get('_kind') == 'movie' else '\U0001f4fa'
-                item = QListWidgetItem(f'{icon} {name} ({year or "?"})')
+                kind_tag = t('movie') if data.get('_kind') == 'movie' else t('tv_show')
+                item = QListWidgetItem(f'{name} ({year or "?"}) - {kind_tag}')
                 item.setData(Qt.ItemDataRole.UserRole, data)
                 if data.get('poster_bytes'):
                     pix = QPixmap()
