@@ -1,24 +1,24 @@
 """Smoked-glass surfaces and small, scalable controls for the desktop UI."""
-from PySide6.QtCore import Qt, QRectF, QSize
+from PySide6.QtCore import Qt, QRectF, QSize, QPoint, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QIcon, QRadialGradient, QPainterPath, QLinearGradient
 from PySide6.QtWidgets import (
     QWidget, QFrame, QCheckBox, QHBoxLayout, QBoxLayout, QLabel, QComboBox,
     QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect,
 )
 
-BG = '#101b24'
-BG_CARD = '#202f3c'
-BG_INPUT = '#243542'
-BG_NAV = '#16232e'
-ACCENT = '#9bc6ef'
-ACCENT_H = '#c0ddf8'
+BG = '#151515'
+BG_CARD = '#292929'
+BG_INPUT = '#303030'
+BG_NAV = '#202020'
+ACCENT = '#dedede'
+ACCENT_H = '#f1f1f1'
 GREEN = '#42c9b0'
 GREEN_H = '#70ddc7'
 RED = '#f19198'
 YELLOW = '#e6c48a'
-TEXT = '#edf4fc'
-TEXT_DIM = '#a4b8cc'
-BORDER = '#3b5063'
+TEXT = '#f3f3f3'
+TEXT_DIM = '#bcbcbc'
+BORDER = 'rgba(255,255,255,40)'
 
 
 def icon(name, color=TEXT_DIM, size=24):
@@ -75,26 +75,30 @@ def icon(name, color=TEXT_DIM, size=24):
 
 
 class GlassBackdrop(QWidget):
-    """Stable internal backdrop; does not depend on OS transparency settings."""
+    """Cached clear/blurred background pairs with an interruptible crossfade."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self._artwork = QPixmap()
+        self._blurred = QPixmap()
+        self._artwork_key = None
+        self._previous = None
+        self._target = None
+        self._scene = None
+        self._progress = 1.0
+        self.transition = QVariantAnimation(self)
+        self.transition.setDuration(800)
+        self.transition.setStartValue(0.0)
+        self.transition.setEndValue(1.0)
+        self.transition.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self.transition.valueChanged.connect(self._advance)
+        self.transition.finished.connect(self._finish_transition)
 
-    def set_artwork(self, data=None):
-        if not data:
-            self._artwork = QPixmap()
-            self.update()
-            return True
-        source = QPixmap()
-        if not source.loadFromData(data):
-            return False
-        # Blur once per selection, never on every frame or during resizing.
-        source = source.scaled(1280, 800, Qt.AspectRatioMode.KeepAspectRatio,
-                               Qt.TransformationMode.SmoothTransformation)
+    @staticmethod
+    def _blur(source):
         scene = QGraphicsScene()
         item = QGraphicsPixmapItem(source)
         effect = QGraphicsBlurEffect()
-        effect.setBlurRadius(14)
+        effect.setBlurRadius(32)
         effect.setBlurHints(QGraphicsBlurEffect.BlurHint.QualityHint)
         item.setGraphicsEffect(effect)
         scene.addItem(item)
@@ -103,38 +107,159 @@ class GlassBackdrop(QWidget):
         painter = QPainter(rendered)
         scene.render(painter, QRectF(rendered.rect()), QRectF(source.rect()))
         painter.end()
-        self._artwork = rendered
-        self.update()
+        return rendered
+
+    def set_artwork(self, data=None, *, animate=True):
+        key = hash(data) if data else None
+        if key == self._artwork_key:
+            return True
+        source = QPixmap()
+        if data and not source.loadFromData(data):
+            return False
+        if not source.isNull():
+            source = source.scaled(1280, 800, Qt.AspectRatioMode.KeepAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+        previous = self._snapshot()
+        self.transition.stop()
+        self._artwork_key = key
+        self._artwork = source
+        self._blurred = self._blur(source) if not source.isNull() else QPixmap()
+        self._target = self._render_pair()
+        if previous is None or not animate or self.width() == 0:
+            self._previous = None
+            self._scene = self._target
+            self._progress = 1.0
+            self.update()
+            for panel in self.findChildren(GlassPanel):
+                panel.update()
+        else:
+            self._previous = self._ensure_size(previous)
+            self._progress = 0.0
+            self._scene = self._previous
+            self.transition.start()
         return True
 
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.fillRect(self.rect(), QColor(BG))
-        if not self._artwork.isNull():
-            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            # Cover the full window without stretching either orientation.
-            scale = max(self.width() / self._artwork.width(), self.height() / self._artwork.height())
-            width, height = self._artwork.width() * scale, self._artwork.height() * scale
-            target = QRectF((self.width() - width) / 2, (self.height() - height) / 2, width, height)
-            p.drawPixmap(target, self._artwork, QRectF(self._artwork.rect()))
-            veil = QLinearGradient(0, 0, 0, self.height())
-            veil.setColorAt(0, QColor(9, 17, 26, 115))
-            veil.setColorAt(1, QColor(9, 17, 26, 205))
-            p.fillRect(self.rect(), veil)
-            return
-        for x, y, radius, color in ((0.12, 0.02, 0.8, '#192b3b'),
-                                     (0.9, 0.8, 0.65, '#142632')):
-            gradient = QRadialGradient(self.width() * x, self.height() * y,
-                                       max(self.width(), self.height()) * radius)
-            gradient.setColorAt(0, QColor(color))
-            gradient.setColorAt(1, QColor(16, 27, 36, 0))
+    def _render_layer(self, image):
+        result = QPixmap(self.size())
+        result.fill(QColor(BG))
+        p = QPainter(result)
+        if image.isNull():
+            gradient = QRadialGradient(self.width() * .18, 0, max(self.width(), self.height()))
+            gradient.setColorAt(0, QColor('#292929'))
+            gradient.setColorAt(1, QColor(BG))
             p.fillRect(self.rect(), gradient)
+        else:
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            scale = max(self.width() / image.width(), self.height() / image.height())
+            width, height = image.width() * scale, image.height() * scale
+            target = QRectF((self.width() - width) / 2, (self.height() - height) / 2, width, height)
+            p.drawPixmap(target, image, QRectF(image.rect()))
+            veil = QLinearGradient(0, 0, 0, self.height())
+            veil.setColorAt(0, QColor(0, 0, 0, 120))
+            veil.setColorAt(1, QColor(0, 0, 0, 200))
+            p.fillRect(self.rect(), veil)
+        p.end()
+        return result
+
+    def _render_pair(self):
+        return self._render_layer(self._artwork), self._render_layer(self._blurred)
+
+    def _snapshot(self):
+        if self._scene is not None and self._scene[0].width() > 0:
+            return self._scene
+        if self.width() > 0:
+            return self._render_pair()
+        return None
+
+    def _ensure_size(self, pair):
+        w, h = self.width(), self.height()
+        if pair[0].size() == QSize(w, h):
+            return pair
+        return tuple(
+            f.scaled(w, h, Qt.AspectRatioMode.IgnoreAspectRatio,
+                     Qt.TransformationMode.SmoothTransformation)
+            for f in pair
+        )
+
+    def frame_pair(self):
+        if self._scene is None:
+            self._scene = self._render_pair()
+        return self._scene
+
+    def _advance(self, value):
+        self._progress = float(value)
+        if self._target is None:
+            return
+        if value >= 1 or self._previous is None:
+            self._scene = self._target
+        elif value <= 0:
+            self._scene = self._previous
+        else:
+            frames = []
+            for old, new in zip(self._previous, self._target):
+                frame = QPixmap(new.size())
+                frame.fill(QColor(BG))
+                painter = QPainter(frame)
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+                painter.setOpacity(1.0 - value)
+                painter.drawPixmap(QRectF(frame.rect()), old, QRectF(old.rect()))
+                painter.setOpacity(value)
+                painter.drawPixmap(0, 0, new)
+                painter.end()
+                frames.append(frame)
+            self._scene = tuple(frames)
+        self.update()
+        for panel in self.findChildren(GlassPanel):
+            panel.update()
+
+    def _finish_transition(self):
+        self._scene = self._target
+        self._previous = None
+        self._progress = 1.0
+        self.update()
+        for panel in self.findChildren(GlassPanel):
+            panel.update()
+
+    def resizeEvent(self, event):
+        if self._previous:
+            self._previous = self._ensure_size(self._previous)
+        self._target = self._render_pair()
+        if self._scene is not None:
+            self._advance(self._progress)
+        super().resizeEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.drawPixmap(0, 0, self.frame_pair()[0])
 
 
 class GlassPanel(QFrame):
+    """Frost the matching background region; never blur foreground controls."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('glass')
+
+    def paintEvent(self, event):
+        backdrop = self.parentWidget()
+        while backdrop is not None and not isinstance(backdrop, GlassBackdrop):
+            backdrop = backdrop.parentWidget()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(.5, .5, -.5, -.5)
+        outline = QPainterPath()
+        outline.addRoundedRect(rect, 22, 22)
+        painter.setClipPath(outline)
+        if backdrop is not None:
+            offset = self.mapTo(backdrop, QPoint(0, 0))
+            source = QRectF(offset.x(), offset.y(), self.width(), self.height())
+            painter.drawPixmap(QRectF(self.rect()), backdrop.frame_pair()[1], source)
+        else:
+            painter.fillRect(self.rect(), QColor(BG_CARD))
+        # Pure blur only – no colour veil, no tint.
+        painter.setClipping(False)
+        painter.setPen(QPen(QColor(255, 255, 255, 26), 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(outline)
 
 
 class GlassComboBox(QComboBox):
@@ -194,8 +319,8 @@ class Toggle(QCheckBox):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor(ACCENT if self.hasFocus() else BORDER), 1))
-        p.setBrush(QColor('#719bc2' if self.isChecked() else BG_INPUT))
+        p.setPen(QPen(QColor(ACCENT) if self.hasFocus() else QColor(255, 255, 255, 40), 1))
+        p.setBrush(QColor('#808080' if self.isChecked() else BG_INPUT))
         p.drawRoundedRect(QRectF(1, 2, 42, 22), 11, 11)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(TEXT if self.isEnabled() else TEXT_DIM))
@@ -207,14 +332,13 @@ STYLE = f'''
 QMainWindow {{ background: {BG}; }}
 QWidget#page, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QFrame#glass, QWidget#sidebar {{
-    background: qlineargradient(x1:0,y1:0,x2:0.8,y2:1,stop:0 rgba(51,70,86,185),stop:1 rgba(23,36,47,218));
-    border: 1px solid rgba(147,183,213,34); border-radius: 22px;
+    background: transparent; border: none; border-radius: 22px;
 }}
 QPushButton#nav {{ background: transparent; border: 1px solid transparent; text-align: left;
     padding: 13px 14px; border-radius: 16px; color: {TEXT_DIM}; font-weight: 500; }}
-QPushButton#nav:hover {{ background: rgba(126,162,193,18); color: {TEXT}; }}
-QPushButton#nav:checked {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #3a536a,stop:1 #293f52);
-    color: {TEXT}; border: 1px solid rgba(160,198,230,40); }}
+QPushButton#nav:hover {{ background: rgba(255,255,255,15); color: {TEXT}; }}
+QPushButton#nav:checked {{ background: rgba(255,255,255,25);
+    color: {TEXT}; border: 1px solid rgba(255,255,255,30); }}
 QLabel {{ background: transparent; border: none; }}
 QLabel#page_title {{ font-size: 30px; font-weight: 700; }}
 QLabel#section {{ font-size: 16px; font-weight: 600; }}
@@ -223,60 +347,60 @@ QLabel#status_bar {{ color: {TEXT_DIM}; font-size: 11px; padding: 7px 22px; }}
 QLabel#empty {{ color: {TEXT_DIM}; font-size: 13px; padding: 24px; }}
 QLabel#version {{ color: {TEXT_DIM}; font-size: 11px; padding: 8px 12px; }}
 QLabel#logo {{ font-size: 15px; font-weight: 700; }}
-QLineEdit, QComboBox {{ background: rgba(33,49,63,170); border: 1px solid {BORDER};
-    border-radius: 11px; padding: 10px 12px; selection-background-color: #496e90; min-height: 18px; }}
-QLineEdit:focus, QComboBox:focus {{ border-color: {ACCENT}; background: #293e50; }}
-QLineEdit:disabled, QComboBox:disabled {{ color: #758a9d; background: rgba(22,34,44,150); }}
+QLineEdit, QComboBox {{ background: rgba(0,0,0,38); border: 1px solid {BORDER};
+    border-radius: 11px; padding: 10px 12px; selection-background-color: #666666; min-height: 18px; }}
+QLineEdit:focus, QComboBox:focus {{ border-color: {ACCENT}; background: rgba(255,255,255,16); }}
+QLineEdit:disabled, QComboBox:disabled {{ color: #858585; background: rgba(0,0,0,28); }}
 QComboBox {{ padding-right: 26px; }}
 QComboBox::drop-down {{ border: none; width: 24px; }}
 QComboBox::down-arrow {{ image: none; }}
 QComboBox QAbstractItemView {{ background: {BG_CARD}; border: 1px solid {BORDER};
-    selection-background-color: #3d5b75; color: {TEXT}; padding: 6px; outline: 0; }}
-QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:0.7,y2:1,stop:0 #304557,stop:1 #243543);
+    selection-background-color: #555555; color: {TEXT}; padding: 6px; outline: 0; }}
+QPushButton {{ background: rgba(255,255,255,20);
     border: 1px solid {BORDER}; border-radius: 12px; padding: 10px 16px; font-weight: 500; }}
-QPushButton:hover {{ background: #3b5369; border-color: #63839e; }}
-QPushButton:pressed {{ background: #23394b; }}
+QPushButton:hover {{ background: rgba(255,255,255,36); border-color: rgba(255,255,255,80); }}
+QPushButton:pressed {{ background: rgba(0,0,0,48); }}
 QPushButton:focus {{ border-color: {ACCENT}; }}
-QPushButton:disabled {{ color: #768b9d; background: #202f3b; border-color: #344657; }}
-QPushButton#primary {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #b0d6f7,stop:1 #83b0d9);
-    color: #102337; border: 1px solid #bddaf2; font-weight: 700; border-radius: 14px; }}
+QPushButton:disabled {{ color: #888888; background: rgba(255,255,255,8); border-color: rgba(255,255,255,20); }}
+QPushButton#primary {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #e3e3e3,stop:1 #c7c7c7);
+    color: #171717; border: 1px solid #eeeeee; font-weight: 700; border-radius: 14px; }}
 QPushButton#primary:hover {{ background: {ACCENT_H}; }}
-QPushButton#primary:pressed {{ background: #7aa6ce; }}
-QPushButton#accent {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #6386a5,stop:1 #405f7b);
-    border: 1px solid #7a9ab6; font-weight: 600; }}
-QPushButton#accent:hover {{ background: #6486a5; }}
-QPushButton#accent:disabled, QPushButton#primary:disabled {{ background: #304353; color: #91a7bb; border-color: #455d71; }}
+QPushButton#primary:pressed {{ background: #bbbbbb; }}
+QPushButton#accent {{ background: rgba(255,255,255,30);
+    border: 1px solid rgba(255,255,255,58); font-weight: 600; }}
+QPushButton#accent:hover {{ background: rgba(255,255,255,46); }}
+QPushButton#accent:disabled, QPushButton#primary:disabled {{ background: rgba(255,255,255,10); color: #999999; border-color: rgba(255,255,255,24); }}
 QPushButton#danger {{ color: {RED}; }}
 QPushButton#danger:hover {{ background: #5a3741; border-color: {RED}; }}
 QPushButton#small {{ padding: 6px 12px; font-size: 12px; }}
 QPushButton#chip {{ border-radius: 12px; padding: 7px 12px; color: {TEXT_DIM}; }}
-QPushButton#chip:checked {{ background: #36536d; border-color: #85b2da; color: {TEXT}; }}
+QPushButton#chip:checked {{ background: rgba(255,255,255,25); border-color: rgba(255,255,255,110); color: {TEXT}; }}
 QPushButton#disclosure {{ background: transparent; border: none; text-align: left; padding: 10px 0; color: {TEXT_DIM}; }}
 QPushButton#disclosure:focus {{ color: {TEXT}; }}
-QFrame#summary {{ background: rgba(17,30,40,85); border: 1px solid rgba(147,183,213,25); border-radius: 16px; }}
-QListWidget, QTextEdit, QTableWidget {{ background: rgba(30,45,58,210); border: 1px solid {BORDER};
+QFrame#summary {{ background: rgba(0,0,0,24); border: 1px solid rgba(255,255,255,20); border-radius: 16px; }}
+QListWidget, QTextEdit, QTableWidget {{ background: rgba(0,0,0,45); border: 1px solid {BORDER};
     border-radius: 14px; padding: 8px; outline: none; }}
 QListWidget::item {{ padding: 8px; border-radius: 8px; }}
-QListWidget::item:selected, QTableWidget::item:selected {{ background: #3b5c78; }}
+QListWidget::item:selected, QTableWidget::item:selected {{ background: #555555; }}
 QTableWidget {{ gridline-color: {BORDER}; }}
 QTableWidget::item {{ padding: 8px; border-bottom: 1px solid {BORDER}; }}
 QHeaderView::section {{ background: {BG_INPUT}; border: none; padding: 12px; color: {TEXT_DIM}; font-weight: 600; }}
 QScrollArea {{ border: none; }}
 QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 0; }}
 QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 0 4px; }}
-QScrollBar::handle {{ background: #526d84; border-radius: 4px; min-height: 28px; min-width: 28px; }}
-QScrollBar::handle:hover {{ background: #819fb8; }}
+QScrollBar::handle {{ background: #666666; border-radius: 4px; min-height: 28px; min-width: 28px; }}
+QScrollBar::handle:hover {{ background: #999999; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 18px; height: 18px; border: 1px solid {BORDER}; border-radius: 5px; background: {BG_INPUT}; }}
-QCheckBox::indicator:checked {{ background: #709bc1; border: 3px solid #bad8f3; }}
+QCheckBox::indicator:checked {{ background: #777777; border: 3px solid #dddddd; }}
 QProgressBar {{ background: {BG_INPUT}; border: none; border-radius: 4px; text-align: center; }}
-QProgressBar::chunk {{ background: #93bde3; border-radius: 4px; }}
-QFrame#card {{ background: rgba(39,58,74,190); border: 1px solid {BORDER}; border-radius: 16px; }}
-QFrame#card_active {{ background: rgba(47,71,90,210); border: 1px solid {ACCENT}; border-radius: 16px; }}
-QFrame#separator {{ background: rgba(145,177,203,40); border: none; max-height: 1px; }}
+QProgressBar::chunk {{ background: #cccccc; border-radius: 4px; }}
+QFrame#card {{ background: rgba(255,255,255,15); border: 1px solid {BORDER}; border-radius: 16px; }}
+QFrame#card_active {{ background: rgba(255,255,255,25); border: 1px solid {ACCENT}; border-radius: 16px; }}
+QFrame#separator {{ background: rgba(255,255,255,30); border: none; max-height: 1px; }}
 QToolTip, QMenu {{ color: {TEXT}; background: {BG_CARD}; border: 1px solid {BORDER}; padding: 6px; }}
-QMenu::item:selected {{ background: #3a5770; }}
+QMenu::item:selected {{ background: #505050; }}
 QDialog, QMessageBox {{ background: {BG}; }}
 '''

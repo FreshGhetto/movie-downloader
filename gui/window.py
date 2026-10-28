@@ -181,6 +181,9 @@ class Window(QMainWindow):
         self.backdrop = root
         self.artwork_loader = ArtworkLoader(self)
         self.artwork_loader.ready.connect(self._apply_backdrop)
+        self.artwork_loader.unavailable.connect(self._fallback_backdrop)
+        self._selected_poster_bytes = None
+        self._selected_artwork_key = None
         self._selected_backdrop_path = None
         root.setObjectName('root')
         self.setCentralWidget(root)
@@ -274,8 +277,8 @@ class Window(QMainWindow):
         p = QPainter(pix)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         grad = QLinearGradient(0, 0, 64, 64)
-        grad.setColorAt(0, QColor('#526f87'))
-        grad.setColorAt(1, QColor('#263c4f'))
+        grad.setColorAt(0, QColor('#686868'))
+        grad.setColorAt(1, QColor('#353535'))
         p.setBrush(QBrush(grad))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRoundedRect(2, 2, 60, 60, 18, 18)
@@ -549,7 +552,7 @@ class Window(QMainWindow):
         summary_box.addLayout(summary_row)
         self.add_button = QPushButton(t('add_to_queue'))
         self.add_button.setObjectName('primary')
-        self.add_button.setIcon(icon('plus', '#102337'))
+        self.add_button.setIcon(icon('plus', '#171717'))
         self.add_button.setMinimumHeight(24)
         self.add_button.clicked.connect(self._add_job)
         summary_box.addWidget(self.add_button)
@@ -959,14 +962,23 @@ class Window(QMainWindow):
             self.kind.setCurrentIndex(0)
 
     def _select_backdrop(self, data):
+        selection = (data.get('backdrop_path'), hash(data.get('poster_bytes') or b''))
+        if selection == self._selected_artwork_key:
+            return
+        self._selected_artwork_key = selection
         self._selected_backdrop_path = data.get('backdrop_path')
+        self._selected_poster_bytes = data.get('poster_bytes')
         self.artwork_loader.cancel()
-        # The poster is available immediately while the landscape artwork loads.
-        # Clear the old film first, including when the new one has no artwork.
-        self.backdrop.set_artwork()
-        self.backdrop.set_artwork(data.get('poster_bytes'))
         if self._selected_backdrop_path:
+            # Keep the displayed image intact until the final landscape is ready.
             self.artwork_loader.request(self._selected_backdrop_path)
+        else:
+            self._fallback_backdrop(None)
+
+    def _fallback_backdrop(self, path):
+        if path == self._selected_backdrop_path:
+            if not self.backdrop.set_artwork(self._selected_poster_bytes):
+                self.backdrop.set_artwork()
 
     def _apply_backdrop(self, path, data):
         if path == self._selected_backdrop_path:

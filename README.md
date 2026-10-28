@@ -54,12 +54,12 @@ py -3.11 -m venv .venv
 
 Or run `CreaExe.bat`. The build reads `config/version.py` and embeds the version in the Windows executable properties.
 
-Output for the current release: `dist-aggiornata/v2.2.0/MovieDownloader-v2.2.0.exe`.
+Output for the current release: `dist-aggiornata/v2.2.1/MovieDownloader-v2.2.1.exe`.
 This is a standalone Windows x64 executable; Python is not required on the destination computer.
 The same directory contains a ZIP distribution, release notes and SHA-256 checksums.
 `Avvia aggiornato.bat` is updated by the build to launch this version.
 
-See the [2.2.0 release notes](releases/v2.2.0.md) and [changelog](CHANGELOG.md).
+See the [2.2.1 release notes](releases/v2.2.1.md) and [changelog](CHANGELOG.md).
 
 ### Requirements
 

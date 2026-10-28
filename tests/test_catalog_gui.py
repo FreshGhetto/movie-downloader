@@ -191,12 +191,95 @@ def test_bright_artwork_stays_dark_and_resizes(window):
     from gui.design import GlassBackdrop
     surface = GlassBackdrop()
     surface.resize(800, 450)
-    surface.set_artwork(artwork_bytes('white'))
+    surface.set_artwork(artwork_bytes('white'), animate=False)
     rendered = surface.grab().toImage()
     assert rendered.pixelColor(400, 10).lightness() < 160
     assert rendered.pixelColor(400, 430).lightness() < 80
     surface.resize(400, 700)
     assert surface.grab().size().height() == 700
-    surface.set_artwork()
+    surface.set_artwork(animate=False)
     assert surface.grab().toImage().pixelColor(200, 350).lightness() < 60
+    surface.deleteLater()
+
+
+def test_background_waits_for_landscape_then_fades_without_blank(window, monkeypatch):
+    monkeypatch.setattr(window.artwork_loader, 'request', Mock())
+    window.backdrop.set_artwork(artwork_bytes('red'), animate=False)
+    old = window.backdrop.frame_pair()[0].toImage().pixelColor(600, 100)
+    window._select_backdrop({'backdrop_path': '/new.jpg', 'poster_bytes': artwork_bytes('yellow')})
+    waiting = window.backdrop.frame_pair()[0].toImage().pixelColor(600, 100)
+    assert waiting == old
+    window.artwork_loader.ready.emit('/new.jpg', artwork_bytes('blue'))
+    first = window.backdrop.frame_pair()[0].toImage().pixelColor(600, 100)
+    assert first == old
+    window.backdrop.transition.setCurrentTime(325)
+    mid = window.backdrop.frame_pair()[0].toImage().pixelColor(600, 100)
+    assert mid.red() > 20 and mid.blue() > 20
+    assert abs(mid.red() + mid.blue() - old.red()) < 5
+    window.backdrop.transition.setCurrentTime(650)
+    end = window.backdrop.frame_pair()[0].toImage().pixelColor(600, 100)
+    assert end.blue() > 80 and end.red() < 3
+
+
+def test_interrupted_fade_continues_from_displayed_frame(window):
+    surface = window.backdrop
+    surface.set_artwork(artwork_bytes('red'), animate=False)
+    surface.set_artwork(artwork_bytes('blue'))
+    surface.transition.setCurrentTime(300)
+    before = surface.frame_pair()[0].toImage().pixelColor(600, 100)
+    surface.set_artwork(artwork_bytes('green'))
+    after = surface.frame_pair()[0].toImage().pixelColor(600, 100)
+    assert after == before
+    window.resize(1060, 740)
+    QApplication.processEvents()
+    surface.transition.setCurrentTime(650)
+    assert surface.frame_pair()[0].size() == surface.size()
+    assert surface.frame_pair()[0].toImage().pixelColor(600, 100).green() > 20
+
+
+def test_network_failure_fades_to_poster_without_clearing(window, monkeypatch):
+    request = Mock()
+    monkeypatch.setattr(window.artwork_loader, 'request', request)
+    surface = window.backdrop
+    surface.set_artwork(artwork_bytes('red'), animate=False)
+    data = {'backdrop_path': '/missing.jpg', 'poster_bytes': artwork_bytes('yellow')}
+    window._select_backdrop(data)
+    window._select_backdrop(data)
+    assert request.call_count == 1
+    before = surface.frame_pair()[0].toImage().pixelColor(600, 100)
+    window.artwork_loader.unavailable.emit('/old.jpg')
+    assert surface.frame_pair()[0].toImage().pixelColor(600, 100) == before
+    window.artwork_loader.unavailable.emit('/missing.jpg')
+    assert surface.frame_pair()[0].toImage().pixelColor(600, 100) == before
+    surface.transition.setCurrentTime(650)
+    end = surface.frame_pair()[0].toImage().pixelColor(600, 100)
+    assert end.red() > 80 and end.green() > 80
+
+
+def test_glass_blurs_the_background_without_blue_tint(window):
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage, QColor, QPainter
+    from gui.design import GlassBackdrop, GlassPanel
+    image = QImage(800, 450, QImage.Format.Format_RGB32)
+    painter = QPainter(image)
+    for x in range(0, 800, 8):
+        painter.fillRect(x, 0, 8, 450, QColor('white' if x % 16 else 'black'))
+    painter.end()
+    data = QBuffer()
+    data.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(data, 'PNG')
+    surface = GlassBackdrop()
+    surface.resize(800, 450)
+    surface.set_artwork(bytes(data.data()), animate=False)
+    panel = GlassPanel(surface)
+    panel.setGeometry(100, 100, 300, 180)
+    surface.show()
+    QApplication.processEvents()
+    screenshot = surface.grab().toImage()
+    clear = [screenshot.pixelColor(x, 150).lightness() for x in range(500, 700)]
+    blurred = [screenshot.pixelColor(x, 150).lightness() for x in range(150, 350)]
+    assert max(blurred) - min(blurred) < (max(clear) - min(clear)) * .35
+    pixel = screenshot.pixelColor(200, 160)
+    assert max(pixel.red(), pixel.green(), pixel.blue()) - min(pixel.red(), pixel.green(), pixel.blue()) <= 1
+    surface.close()
     surface.deleteLater()

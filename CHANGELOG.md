@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](releases/v2.2.1.md) — 2026-10-28
+
+- Replaced blue-gray panel fills with neutral glass sampling the blurred backdrop.
+- Added a 650 ms crossfade that keeps the previous artwork visible while loading.
+- Preserved the displayed frame when a new selection interrupts a transition.
+- Avoided redundant loads and animations when selecting the same movie again.
+
 ## [2.2.0](releases/v2.2.0.md) — 2026-10-28
 
 - Redesigned the desktop UI with dark smoked-glass panels and a responsive layout.

@@ -9,6 +9,7 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRe
 
 class ArtworkLoader(QObject):
     ready = Signal(str, bytes)
+    unavailable = Signal(str)
     IMAGE_BASE = 'https://image.tmdb.org/t/p/w1280'
     MAX_BYTES = 6 * 1024 * 1024
 
@@ -27,6 +28,8 @@ class ArtworkLoader(QObject):
         self.cancel()
         # Only image filenames from TMDb results, never arbitrary URLs.
         if not isinstance(path, str) or not re.fullmatch(r'/[\w-]+\.(?:jpg|png|webp)', path, re.ASCII):
+            if isinstance(path, str):
+                self.unavailable.emit(path)
             return
         if path in self.cache:
             self.cache.move_to_end(path)
@@ -46,9 +49,11 @@ class ArtworkLoader(QObject):
                 return
             self.pending = None
             if reply.error() != QNetworkReply.NetworkError.NoError:
+                self.unavailable.emit(path)
                 return
             data = bytes(reply.readAll())
             if not data or len(data) > self.MAX_BYTES or QImage.fromData(data).isNull():
+                self.unavailable.emit(path)
                 return
             self.cache[path] = data
             while len(self.cache) > 8:

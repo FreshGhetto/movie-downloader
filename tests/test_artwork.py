@@ -51,6 +51,8 @@ def test_cancel_previous_download_and_reuse_cached_artwork():
     loader = ArtworkLoader()
     loader.network = Network()
     ready = []
+    unavailable = []
+    loader.unavailable.connect(unavailable.append)
     loader.ready.connect(lambda path, data: ready.append((path, data)))
     loader.request('/first.jpg')
     first = loader.network.requests[0][1]
@@ -63,6 +65,7 @@ def test_cancel_previous_download_and_reuse_cached_artwork():
     second.content = png()
     second.finished.emit()
     assert ready == [('/second.jpg', second.content)]
+    assert unavailable == []
     loader.request('/second.jpg')
     assert len(loader.network.requests) == 2
     assert ready[-1] == ('/second.jpg', second.content)
@@ -75,6 +78,8 @@ def test_unavailable_invalid_and_oversized_artwork_fail_quietly():
     loader = ArtworkLoader()
     loader.network = Network()
     ready = []
+    unavailable = []
+    loader.unavailable.connect(unavailable.append)
     loader.ready.connect(lambda *args: ready.append(args))
     for path in (None, '', 'https://example.org/image.jpg', '/../image.jpg'):
         loader.request(path)
@@ -93,4 +98,5 @@ def test_unavailable_invalid_and_oversized_artwork_fail_quietly():
     assert reply.failure == QNetworkReply.NetworkError.OperationCanceledError
     assert ready == []
     assert not loader.cache
+    assert unavailable[-3:] == ['/invalid.jpg', '/missing.jpg', '/huge.jpg']
     loader.deleteLater()
