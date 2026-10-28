@@ -324,16 +324,17 @@ class Toggle(QCheckBox):
 
 
 STYLE = f'''
-* {{ font-family: "Segoe UI", sans-serif; font-size: 13px; color: {TEXT}; }}
+* {{ font-family: "Segoe UI", sans-serif; font-size: 13px; color: {TEXT}; outline: none; }}
 QMainWindow {{ background: {BG}; }}
 QWidget#page, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QFrame#glass, QWidget#sidebar {{
     background: transparent; border: none; border-radius: 22px;
 }}
-QPushButton#nav {{ background: transparent; border: none; text-align: left;
+QPushButton#nav {{ background: transparent; border: none; outline: 0; text-align: left;
     padding: 13px 14px; border-radius: 16px; color: {TEXT_DIM}; font-weight: 500; }}
 QPushButton#nav:hover {{ background: rgba(255,255,255,15); color: {TEXT}; }}
 QPushButton#nav:checked {{ background: rgba(255,255,255,25); color: {TEXT}; }}
+QPushButton#nav:focus {{ outline: 0; border: none; }}
 QLabel {{ background: transparent; border: none; }}
 QLabel#page_title {{ font-size: 30px; font-weight: 700; }}
 QLabel#section {{ font-size: 16px; font-weight: 600; }}
@@ -352,9 +353,10 @@ QComboBox::down-arrow {{ image: none; }}
 QComboBox QAbstractItemView {{ background: {BG_CARD}; border: 1px solid {BORDER};
     selection-background-color: #555555; color: {TEXT}; padding: 6px; outline: 0; }}
 QPushButton {{ background: rgba(255,255,255,20);
-    border: none; border-radius: 12px; padding: 10px 16px; font-weight: 500; }}
+    border: none; border-radius: 12px; padding: 10px 16px; font-weight: 500; outline: 0; }}
 QPushButton:hover {{ background: rgba(255,255,255,36); }}
 QPushButton:pressed {{ background: rgba(0,0,0,48); }}
+QPushButton:focus {{ outline: 0; border: none; }}
 QPushButton:disabled {{ color: #888888; background: rgba(255,255,255,8); }}
 QPushButton#primary {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #e3e3e3,stop:1 #c7c7c7);
     color: #171717; border: none; font-weight: 700; border-radius: 14px; }}
@@ -366,10 +368,11 @@ QPushButton#accent:disabled, QPushButton#primary:disabled {{ background: rgba(25
 QPushButton#danger {{ color: {RED}; }}
 QPushButton#danger:hover {{ background: #5a3741; }}
 QPushButton#small {{ padding: 6px 12px; font-size: 12px; }}
-QPushButton#chip {{ border-radius: 12px; padding: 7px 12px; color: {TEXT_DIM}; }}
+QPushButton#chip {{ border-radius: 12px; padding: 7px 12px; color: {TEXT_DIM}; outline: 0; }}
 QPushButton#chip:checked {{ background: rgba(255,255,255,25); color: {TEXT}; }}
-QPushButton#disclosure {{ background: transparent; border: none; text-align: left; padding: 10px 0; color: {TEXT_DIM}; }}
-QPushButton#disclosure:focus {{ color: {TEXT}; }}
+QPushButton#chip:focus {{ outline: 0; border: none; }}
+QPushButton#disclosure {{ background: transparent; border: none; outline: 0; text-align: left; padding: 10px 0; color: {TEXT_DIM}; }}
+QPushButton#disclosure:focus {{ outline: 0; border: none; color: {TEXT}; }}
 QFrame#summary {{ background: rgba(0,0,0,24); border: none; border-radius: 16px; }}
 QListWidget, QTextEdit, QTableWidget {{ background: rgba(0,0,0,45); border: none;
     border-radius: 14px; padding: 8px; outline: none; }}
